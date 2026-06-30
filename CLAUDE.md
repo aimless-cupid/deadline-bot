@@ -40,7 +40,7 @@ A Telegram bot that ingests a forwarded/pasted announcement, makes **one** struc
 ## Build structure — rungs (one new failure surface each; isolation-test before integrating)
 1. **Env** — Python 3.12, VS Code, fresh repo, `.venv`, `requests`, Claude Code on the repo, GitHub.  ← *current*
 2. **Echo bot** — raw REST long-poll (`getUpdates` / `sendMessage` + offset); token in `.env`.
-3. **LLM extraction** — raw REST → structured dict; relative dates resolved via today's date in the prompt; hardened per above.
+3. **LLM extraction** — raw REST → structured dict; the model extracts `when_text` (a verbatim date phrase), Python resolves it to a real date via `dateparser` (no calendar math in the model); hardened per above.
 4. **Postgres storage** — install Postgres, psycopg v3, create `deadlinebot` DB, `DATABASE_URL` in `.env`; isolation-test connectivity *before* writing storage code; add dedupe.
 5. **FastAPI dashboard** — timeline + keyword search.
 6. **Deploy** — free host with real users; confirm the host's supported Python first.
@@ -57,3 +57,9 @@ pip install -r requirements.txt
 # run bot         — TBD (Rung 2)
 # run dashboard   — TBD (Rung 5)
 ```
+
+## Database
+- `DATABASE_URL=postgresql://postgres:<pwd>@localhost:5432/deadlinebot` (in .env)
+- Table `deadlines`: id, title, type, deadline (DATE, nullable), course, summary, tags (text[]), raw_text, content_hash (UNIQUE), created_at
+- Dedupe: sha256 of normalized raw_text → content_hash; INSERT ... ON CONFLICT (content_hash) DO NOTHING
+- Date resolution: LLM extracts when_text (phrase); Python (`extractor.resolve_when`) resolves via dateparser, anchored to the message's send time in `BOT_TZ` (.env, default UTC). LLM does NOT compute dates. Two dateparser gaps are patched in code: "next/this <weekday>" (returns None) and bare day-of-month like "the 25th" (mis-parsed).
