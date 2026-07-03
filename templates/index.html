@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Deadline Dashboard</title>
+</head>
+<body>
+  <h1>Upcoming Deadlines</h1>
+
+  <form method="get" action="/">
+    <input type="text" name="q" value="{{ q or '' }}">
+    <button type="submit">Search</button>
+    {% if q %}<a href="/">Clear</a>{% endif %}
+  </form>
+
+  {% if upcoming %}
+    <ul>
+      {% for d in upcoming %}
+        <li>
+          <strong>{{ d.deadline }}</strong> — {{ d.title }}
+          {% if d.course %}({{ d.course }}){% endif %}
+          {% if d.summary %}<br><small>{{ d.summary }}</small>{% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p>No upcoming deadlines.</p>
+  {% endif %}
+
+  {# Undated block: only shows if there are unresolved-date rows #}
+  {% if undated %}
+    <h2>Undated / needs review</h2>
+    <ul>
+      {% for d in undated %}
+        <li>{{ d.title }} — <small>{{ d.summary }}</small></li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+</body>
+</html>
