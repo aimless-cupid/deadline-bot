@@ -30,6 +30,7 @@ A Telegram bot that ingests a forwarded/pasted announcement, makes **one** struc
 - **One failure surface at a time.** Build rung by rung; isolation-test each component *before* integrating.
 - **Plan before code** on anything non-trivial; explain non-obvious choices. The human must be able to explain every line and defend every decision — annotate, don't just emit.
 - **"Better" = architecture, tests, README — not new features or gold-plating.** The done-bar is fixed.
+- **Git: put fixes on a short-lived branch + open a PR.** I'll merge.
 
 ## Known gotchas (apply immediately — don't re-discover)
 - **`AQ.` key → raw REST** (above). No provider switch.
