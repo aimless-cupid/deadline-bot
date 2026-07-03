@@ -2,6 +2,7 @@ import os
 import hashlib
 from datetime import date
 import psycopg
+from psycopg.rows import dict_row
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -66,6 +67,47 @@ def save_deadline(d, raw_text):
             ),
         ).fetchone()
     return "saved" if row else "duplicate"
+
+
+def _search_clause(q):
+    """Return (sql_fragment, params) for an optional keyword filter.
+    Empty/None q -> no filter. Keeps search identical across both queries."""
+    if not q:
+        return "", []
+    # ILIKE = case-insensitive LIKE; %term% = substring match anywhere.
+    # q is passed as a bound parameter (%s), never concatenated -> injection-safe.
+    frag = "AND (title ILIKE %s OR summary ILIKE %s OR course ILIKE %s)"
+    like = f"%{q}%"
+    return frag, [like, like, like]
+
+
+def get_upcoming(q=None):
+    """Upcoming (today-or-future) deadlines, soonest first, optional keyword filter."""
+    frag, params = _search_clause(q)
+    sql = f"""
+        SELECT id, title, type, deadline, course, summary, tags
+        FROM deadlines
+        WHERE deadline >= CURRENT_DATE
+        {frag}
+        ORDER BY deadline ASC
+    """
+    with psycopg.connect(DATABASE_URL, row_factory=dict_row) as conn:
+        return conn.execute(sql, params).fetchall()
+
+
+def get_undated(q=None):
+    """Real deadlines whose date didn't resolve (deadline IS NULL).
+    The 'needs review' block — also surfaces pipeline parse failures."""
+    frag, params = _search_clause(q)
+    sql = f"""
+        SELECT id, title, type, deadline, course, summary, tags
+        FROM deadlines
+        WHERE deadline IS NULL
+        {frag}
+        ORDER BY created_at DESC
+    """
+    with psycopg.connect(DATABASE_URL, row_factory=dict_row) as conn:
+        return conn.execute(sql, params).fetchall()
 
 
 if __name__ == "__main__":
