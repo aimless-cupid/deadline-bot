@@ -8,6 +8,13 @@ from dotenv import load_dotenv
 load_dotenv()
 DATABASE_URL = os.environ["DATABASE_URL"]
 
+def _connect(**kwargs):
+    # managed Postgres (Neon) exposes a pooled endpoint that is PgBouncer in
+    # transaction mode — it can't guarantee the same backend connection across
+    # statements, so server-side prepared statements would break. disable them.
+    return psycopg.connect(DATABASE_URL, prepare_threshold=None, **kwargs)
+
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS deadlines (
     id           SERIAL PRIMARY KEY,         -- auto-incrementing row id
@@ -24,7 +31,7 @@ CREATE TABLE IF NOT EXISTS deadlines (
 """
 
 def init_db():
-    with psycopg.connect(DATABASE_URL) as conn:
+    with _connect() as conn:
         conn.execute(SCHEMA)
     print("Schema ready.")
 
@@ -46,7 +53,7 @@ def _parse_date(value):
 
 def save_deadline(d, raw_text):
     """Insert one deadline. Returns 'saved' or 'duplicate'."""
-    with psycopg.connect(DATABASE_URL) as conn:
+    with _connect() as conn:
         row = conn.execute(
             """
             INSERT INTO deadlines
@@ -91,7 +98,7 @@ def get_upcoming(q=None):
         {frag}
         ORDER BY deadline ASC
     """
-    with psycopg.connect(DATABASE_URL, row_factory=dict_row) as conn:
+    with _connect(row_factory=dict_row) as conn:
         return conn.execute(sql, params).fetchall()
 
 
@@ -106,7 +113,7 @@ def get_undated(q=None):
         {frag}
         ORDER BY created_at DESC
     """
-    with psycopg.connect(DATABASE_URL, row_factory=dict_row) as conn:
+    with _connect(row_factory=dict_row) as conn:
         return conn.execute(sql, params).fetchall()
 
 
