@@ -5,6 +5,8 @@
 ## What this is
 A Telegram bot that ingests a forwarded/pasted announcement, makes **one** structured model call to extract a deadline object, stores it in PostgreSQL, and surfaces it on a FastAPI dashboard (upcoming-deadline timeline + keyword search). Deployed on a free host.
 
+**Files:** `handler.py` holds the shared per-update pipeline (`handle_update`); `bot.py` (long-poll) is the **local-dev** transport, `web.py` (FastAPI) serves the dashboard **and** the production webhook route `POST /telegram/webhook` (guarded by `WEBHOOK_SECRET`). Both transports call the same `handle_update`, so dev and prod can't drift. `extractor.py` = model call + date resolution; `db.py` = Postgres.
+
 ## Stack — LOCKED (do not change without explicit instruction)
 - **Python 3.12** (not 3.13 / 3.14 — see gotchas)
 - **FastAPI** — dashboard (Rung 5)
@@ -44,7 +46,7 @@ A Telegram bot that ingests a forwarded/pasted announcement, makes **one** struc
 3. **LLM extraction** — raw REST → structured dict; the model extracts `when_text` (a verbatim date phrase), Python resolves it to a real date via `dateparser` (no calendar math in the model); hardened per above.
 4. **Postgres storage** — install Postgres, psycopg v3, create `deadlinebot` DB, `DATABASE_URL` in `.env`; isolation-test connectivity *before* writing storage code; add dedupe.
 5. **FastAPI dashboard** — timeline + keyword search.
-6. **Deploy** — free host with real users; confirm the host's supported Python first.
+6. **Deploy** — free host (Render, Python pinned to 3.12 via `.python-version`) with real users; the bot runs as a Telegram **webhook** (`web.py`), not long-poll; confirm the host's supported Python first.
 
 ## Commands
 *(fill in as the build moves)*
@@ -64,3 +66,4 @@ pip install -r requirements.txt
 - Table `deadlines`: id, title, type, deadline (DATE, nullable), course, summary, tags (text[]), raw_text, content_hash (UNIQUE), created_at
 - Dedupe: sha256 of normalized raw_text → content_hash; INSERT ... ON CONFLICT (content_hash) DO NOTHING
 - Date resolution: LLM extracts when_text (phrase); Python (`extractor.resolve_when`) resolves via dateparser, anchored to the message's send time in `BOT_TZ` (.env, default UTC). LLM does NOT compute dates. Two dateparser gaps are patched in code: "next/this <weekday>" (returns None) and bare day-of-month like "the 25th" (mis-parsed).
+- Pooler-safe: all connections go through `db._connect()`, which passes `prepare_threshold=None` to disable server-side prepared statements — required for managed Postgres (Neon) whose pooled endpoint is PgBouncer in transaction mode (no stable backend across statements).
