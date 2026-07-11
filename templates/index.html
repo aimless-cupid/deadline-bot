@@ -7,10 +7,10 @@
 <body>
   <h1>Upcoming Deadlines</h1>
 
-  <form method="get" action="/">
+  <form method="get" action="/b/{{ token }}">
     <input type="text" name="q" value="{{ q or '' }}">
     <button type="submit">Search</button>
-    {% if q %}<a href="/">Clear</a>{% endif %}
+    {% if q %}<a href="/b/{{ token }}">Clear</a>{% endif %}
   </form>
 
   {% if upcoming %}

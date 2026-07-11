@@ -17,7 +17,7 @@ from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 
 from extractor import extract, resolve_when   # text -> dict ; when_text -> date
-from db import save_deadline                   # persist extracted deadlines
+from db import save_deadline, get_or_create_board   # persist + per-chat board
 
 load_dotenv()
 TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
@@ -28,6 +28,10 @@ BASE = f"https://api.telegram.org/bot{TOKEN}"
 # is present in BOTH long-poll AND webhook updates — identical message shape.
 _TZ_NAME = os.environ.get("BOT_TZ")
 BOT_TZ = ZoneInfo(_TZ_NAME) if _TZ_NAME else timezone.utc
+
+# Public base for board links, e.g. https://<app>.onrender.com (no trailing
+# slash). Required — board URLs are built from this, never hardcoded.
+PUBLIC_BASE_URL = os.environ["PUBLIC_BASE_URL"].rstrip("/")
 
 
 def send_message(chat_id, text):
@@ -87,6 +91,20 @@ def handle_update(update):
 
     chat_id = message["chat"]["id"]
 
+    # Every chat owns a private board; ensure it exists and get its link.
+    token = get_or_create_board(chat_id)
+    board_url = f"{PUBLIC_BASE_URL}/b/{token}"
+
+    # /start (incl. "/start@Bot" in groups): greet + hand over the board link.
+    if text.strip().lower().startswith("/start"):
+        send_message(
+            chat_id,
+            "Hi! Forward or paste a college announcement and I'll pull out the "
+            "deadline and add it to your private board.\n\n"
+            f"Your board: {board_url}",
+        )
+        return
+
     try:
         result = extract_with_retry(text)
 
@@ -96,13 +114,14 @@ def handle_update(update):
             received_at = datetime.fromtimestamp(message["date"], tz=BOT_TZ)
             result["deadline"] = resolve_when(result.get("when_text"), received_at)
 
-            status = save_deadline(result, text)
+            status = save_deadline(result, text, chat_id)
             reply = format_reply(result)
             if status == "duplicate":
                 reply += "\n\n(already saved earlier)"
         else:
             reply = "No deadline found in that message."
 
+        reply += f"\n\nYour board: {board_url}"
         send_message(chat_id, reply)
 
     except Exception as e:
