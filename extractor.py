@@ -8,7 +8,11 @@ from dotenv import load_dotenv
 
 load_dotenv()
 KEY = os.environ["GEMINI_API_KEY"]
-MODEL = "gemini-2.5-flash"               # keep in sync with what 3a confirmed
+# quotas are PER-MODEL: on this project's free tier 2.5-flash is capped at 20 RPD
+# (unusable), while 3.1-flash-lite gives 500 RPD / 15 RPM. it's also the RIGHT
+# model for this task — schema-constrained classification (has_deadline) + verbatim
+# span extraction (when_text) at temp 0, no reasoning. id confirmed via ListModels.
+MODEL = "gemini-3.1-flash-lite"
 URL = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent"
 HEADERS = {"x-goog-api-key": KEY, "Content-Type": "application/json"}
 
