@@ -15,7 +15,7 @@ flowchart TD
     U["Telegram user"] -->|"forwards / pastes announcement"| TG["Telegram Bot API"]
     TG -->|"POST /telegram/webhook (secret token)"| W["FastAPI · web.py (Render)"]
     W --> H["handler.handle_update()"]
-    H --> E["extractor.extract()<br/>Gemini 2.5 Flash · raw REST · responseSchema · temp 0"]
+    H --> E["extractor.extract()<br/>Gemini 3.1 Flash Lite · raw REST · responseSchema · temp 0"]
     E --> R["extractor.resolve_when()<br/>dateparser · anchored to send time"]
     R --> S["db.save_deadline(chat_id)<br/>Neon Postgres · per-(chat, hash) dedupe"]
     S --> RE["sendMessage → reply + board link"]
@@ -27,7 +27,7 @@ flowchart TD
     J --> B
 ```
 
-It's one FastAPI service doing two jobs. `web.py` hosts the Telegram webhook at `POST /telegram/webhook`, and it serves each user their own private board at `/b/{token}` — the root `/` is just a landing page, there's no global dashboard. The webhook and the local long-poll loop in `bot.py` both call the same `handler.handle_update()`, so dev and prod can't quietly drift apart. Extraction and date resolution live in `extractor.py`. Every Postgres query lives in `db.py`. The stack is Python 3.12, FastAPI, psycopg v3, PostgreSQL on Neon, and Gemini 2.5 Flash over plain REST, all running on Render's free tier.
+It's one FastAPI service doing two jobs. `web.py` hosts the Telegram webhook at `POST /telegram/webhook`, and it serves each user their own private board at `/b/{token}` — the root `/` is just a landing page, there's no global dashboard. The webhook and the local long-poll loop in `bot.py` both call the same `handler.handle_update()`, so dev and prod can't quietly drift apart. Extraction and date resolution live in `extractor.py`. Every Postgres query lives in `db.py`. The stack is Python 3.12, FastAPI, psycopg v3, PostgreSQL on Neon, and Gemini 3.1 Flash Lite over plain REST, all running on Render's free tier.
 
 ## How it works
 
