@@ -142,8 +142,9 @@ def handle_update(update):
     if text.strip().lower().startswith("/start"):
         send_message(
             chat_id,
-            "Hi! Forward or paste a college announcement and I'll pull out the "
-            "deadline and add it to your private board.\n\n"
+            "Hi! Forward or paste any message with a deadline — an announcement, "
+            "a bill, a renewal notice — and I'll pull out the deadline and add it "
+            "to your private board.\n\n"
             f"Your board: {board_url}",
         )
         return
