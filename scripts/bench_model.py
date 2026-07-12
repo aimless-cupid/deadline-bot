@@ -28,14 +28,21 @@ from extractor import PROMPT, SCHEMA
 load_dotenv()
 KEY = os.environ["GEMINI_API_KEY"]
 
-# (announcement, expectation) — includes the negative case that MUST stay negative
+# (announcement, expectation) — spans college + general deadlines; the two
+# negatives (social events / date-mentions with no action) MUST stay negative.
 SAMPLES = [
-    ("Reminder: DBMS assignment 3 is due this Sunday on the portal.",
+    ("DBMS assignment 3 is due this Sunday on the portal.",
      {"has_deadline": True, "when_text": "this Sunday"}),
     ("Last date to pay the semester exam fee is the 25th.",
      {"has_deadline": True, "when_text": "the 25th"}),
     ("Come for biryani night this Friday at the hostel mess!",
      {"has_deadline": False}),
+    ("Ram's birthday party is on Saturday, come by!",
+     {"has_deadline": False}),
+    ("Your electricity bill of Rs 2400 is due on the 20th.",
+     {"has_deadline": True, "when_text": "the 20th"}),
+    ("Car insurance renewal deadline is 5 August.",
+     {"has_deadline": True, "when_text": "5 August"}),
     ("Project submissions open soon, dates to be announced.",
      {"has_deadline": True, "when_text": None}),
 ]
