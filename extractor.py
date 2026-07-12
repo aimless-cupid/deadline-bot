@@ -8,16 +8,16 @@ from dotenv import load_dotenv
 
 load_dotenv()
 KEY = os.environ["GEMINI_API_KEY"]
-# quotas are PER-MODEL: on this project's free tier 2.5-flash is capped at 20 RPD
-# (unusable), while 3.1-flash-lite gives 500 RPD / 15 RPM. it's also the RIGHT
-# model for this task — schema-constrained classification (has_deadline) + verbatim
-# span extraction (when_text) at temp 0, no reasoning. id confirmed via ListModels.
+# Quotas are per-model. On this project's free tier 2.5-flash caps out at 20
+# requests a day, while 3.1-flash-lite gives 500 a day / 15 a minute. It also
+# fits the task better: classify has_deadline and copy when_text at temp 0, with
+# no reasoning involved. The id came from ListModels.
 MODEL = "gemini-3.1-flash-lite"
 URL = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent"
 HEADERS = {"x-goog-api-key": KEY, "Content-Type": "application/json"}
 
-# The schema GUARANTEES the response shape. The prompt guarantees the SEMANTICS
-# (what counts as a deadline, what to copy into when_text, the has_deadline gate).
+# The schema pins down the response shape; the prompt handles the meaning (what
+# counts as a deadline, what goes in when_text, the has_deadline gate).
 SCHEMA = {
     "type": "object",
     "properties": {
@@ -60,22 +60,22 @@ def extract(text):
         "generationConfig": {
             "responseMimeType": "application/json",
             "responseSchema": SCHEMA,
-            "temperature": 0,                     # determinism: same input → same output
+            "temperature": 0,                     # same input gives the same output
         },
     }
     resp = requests.post(URL, headers=HEADERS, json=body, timeout=30)
     resp.raise_for_status()
-    # Even in JSON mode, the model's answer is a JSON *string* inside the response.
+    # In JSON mode the answer still comes back as a JSON string inside the response.
     raw = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
     return json.loads(raw)
 
 
-# ---------- Date resolution (Python, not the LLM) ----------
-# The model returns when_text as a verbatim phrase; we turn it into a real date
-# deterministically. dateparser does the parsing, but v1.4.1 is wrong in two
-# spots we patch here: it can't parse "next/this <weekday>" (returns None), and
-# it misreads lone ordinals ("1st" -> a month, "31st" -> a year). Everything
-# else ("tomorrow", "in 3 days", "5 July", ISO dates) is dateparser's job.
+# ---------- Date resolution (in Python, not the model) ----------
+# The model gives us when_text as a phrase; we turn it into a real date here.
+# dateparser does most of the work, but v1.4.1 gets two things wrong that we
+# patch below: it can't parse "next/this <weekday>" (returns None), and it
+# misreads lone ordinals ("1st" as a month, "31st" as a year). Everything else
+# ("tomorrow", "in 3 days", "5 July", ISO dates) is left to dateparser.
 
 _LEADING = re.compile(
     r"^(?:by|on|due|before|the|this|next|coming|upcoming)\b\s*", re.IGNORECASE)
@@ -106,26 +106,24 @@ def _next_day_of_month(day, anchor):
 
 
 def resolve_when(when_text, received_at):
-    """Resolve a verbatim date phrase into a real date, deterministically.
+    """Turn a date phrase into a real date, anchored to when the message was sent.
 
-    Anchored to `received_at` (the message's send time) so the result never
-    depends on when we happen to process the message.
+    Anchoring to `received_at` means the result doesn't depend on when we happen
+    to process the message. Two dateparser settings do the work:
+      RELATIVE_BASE=received_at   makes "now" for phrases like "tomorrow" or
+                                  "next week" the send time, so it's reproducible.
+      PREFER_DATES_FROM="future"  makes ambiguous dates like "Friday" or "5 July"
+                                  resolve forward, which is what a deadline means.
 
-    dateparser settings:
-      RELATIVE_BASE=received_at  -> "now" for relative phrases ("tomorrow",
-                                    "next week") is the send time. Reproducible.
-      PREFER_DATES_FROM="future" -> ambiguous dates ("Friday", "5 July") resolve
-                                    forward — the sense a deadline carries.
-
-    Returns a datetime.date, or None if the phrase is empty/unparseable.
+    Returns a datetime.date, or None if the phrase is empty or unparseable.
     """
     if not when_text:
         return None
     anchor = received_at.date()
     bare = _strip_leading(when_text)
 
-    # Bare day-of-month ("the 25th"): place it ourselves and roll to the next
-    # future month — dateparser is unreliable on lone ordinals.
+    # Bare day-of-month like "the 25th": place it ourselves and roll to the next
+    # month that has it, since dateparser is unreliable on lone ordinals.
     match = _BARE_DAY.match(bare)
     if match:
         day = int(match.group(1))

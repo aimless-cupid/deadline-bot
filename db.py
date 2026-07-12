@@ -10,9 +10,9 @@ load_dotenv()
 DATABASE_URL = os.environ["DATABASE_URL"]
 
 def _connect(**kwargs):
-    # managed Postgres (Neon) exposes a pooled endpoint that is PgBouncer in
-    # transaction mode — it can't guarantee the same backend connection across
-    # statements, so server-side prepared statements would break. disable them.
+    # Neon's pooled endpoint is PgBouncer in transaction mode, so two statements
+    # aren't guaranteed to hit the same backend connection. That breaks
+    # server-side prepared statements, so we turn them off.
     return psycopg.connect(DATABASE_URL, prepare_threshold=None, **kwargs)
 
 
@@ -32,8 +32,8 @@ SCHEMA = (
         raw_text     TEXT NOT NULL,               -- original announcement
         content_hash TEXT NOT NULL,               -- dedupe fingerprint (scoped below)
         created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-        -- uniqueness scoped to ownership: the same announcement forwarded by two
-        -- users is two rows, not a silent drop for whoever sent it second.
+        -- uniqueness is per owner: the same announcement forwarded by two users
+        -- becomes two rows, instead of silently dropping the second one.
         UNIQUE (chat_id, content_hash)
     );
     """,
@@ -71,9 +71,9 @@ def _parse_date(value):
 def save_deadline(d, raw_text, chat_id):
     """Insert one deadline owned by chat_id. Returns 'saved' or 'duplicate'.
 
-    Dedupe is scoped to (chat_id, content_hash): re-delivery of the same message
-    is still a per-user no-op, but two different users can each keep the same
-    announcement — a global unique hash would silently drop the second user's."""
+    Dedupe is on (chat_id, content_hash), so re-sending the same message is a
+    no-op for that user, but two different users can each keep the same
+    announcement. A global hash would have dropped the second user's copy."""
     with _connect() as conn:
         row = conn.execute(
             """
@@ -111,7 +111,7 @@ def _search_clause(q):
 
 
 def get_upcoming(chat_id, q=None):
-    """Upcoming (today-or-future) deadlines for ONE chat, soonest first.
+    """Today-or-future deadlines for one chat, soonest first.
     chat_id is a bound parameter, never interpolated."""
     frag, params = _search_clause(q)
     sql = f"""
@@ -126,8 +126,8 @@ def get_upcoming(chat_id, q=None):
 
 
 def get_undated(chat_id, q=None):
-    """ONE chat's real deadlines whose date didn't resolve (deadline IS NULL).
-    The 'needs review' block — also surfaces pipeline parse failures."""
+    """One chat's deadlines whose date didn't resolve (deadline IS NULL).
+    This is the 'needs review' block, and it also surfaces parse failures."""
     frag, params = _search_clause(q)
     sql = f"""
         SELECT id, title, type, deadline, course, summary, tags
@@ -141,13 +141,12 @@ def get_undated(chat_id, q=None):
 
 
 def get_or_create_board(chat_id):
-    """Return the stable board token for a chat, minting one on first contact.
+    """Return a chat's board token, creating one the first time we see the chat.
 
-    Idempotent: the INSERT is a no-op if the board already exists, and we always
-    read back the row that's actually stored — so repeated calls (and the write
-    on every incoming update) converge on a single token. INSERT + SELECT share
-    one transaction, so the pooled (transaction-mode) endpoint keeps them on the
-    same backend."""
+    The INSERT is a no-op if the board already exists, and we always read back
+    the stored row, so repeated calls (it runs on every update) settle on one
+    token. The INSERT and SELECT share a transaction, so the transaction-mode
+    pooler keeps them on the same backend."""
     with _connect() as conn:
         conn.execute(
             "INSERT INTO boards (chat_id, token) VALUES (%s, %s) "

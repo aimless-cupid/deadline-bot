@@ -15,8 +15,8 @@ templates = Jinja2Templates(directory="templates")
 
 
 def _chat_id_or_404(token):
-    """A board is addressed only by its unguessable token. Unknown token -> 404;
-    we never reveal whether a token 'could' exist. Tokens are never logged."""
+    """Look up the chat behind a board token, or 404 if there isn't one.
+    An unknown token just 404s, and tokens are never logged."""
     chat_id = get_chat_id_for_token(token)
     if chat_id is None:
         raise HTTPException(status_code=404, detail="board not found")
@@ -25,8 +25,8 @@ def _chat_id_or_404(token):
 
 @app.get("/", response_class=HTMLResponse)
 def landing(request: Request):
-    # There is no global board anymore — each chat has its own private one, so
-    # the root exposes nobody's deadlines; it just points at the bot.
+    # There's no shared board; each chat has its own. The root shows nobody's
+    # deadlines, it just points people at the bot.
     return templates.TemplateResponse(request, "landing.html", {})
 
 
@@ -53,14 +53,15 @@ def telegram_webhook(
     update: dict,                                   # FastAPI parses the JSON body
     x_telegram_bot_api_secret_token: str | None = Header(default=None),
 ):
-    """Telegram POSTs one Update here. `def` (not async) so FastAPI runs the
-    blocking pipeline (Gemini/DB/requests) in a threadpool — no event-loop stall."""
+    """Telegram POSTs one update here. It's a sync def, so FastAPI runs the
+    blocking work (Gemini, DB, requests) in a threadpool and the event loop
+    keeps moving."""
     # The URL is guessable; only Telegram knows the secret we set via setWebhook.
     if x_telegram_bot_api_secret_token != WEBHOOK_SECRET:
         raise HTTPException(status_code=403, detail="bad secret token")
 
     handle_update(update)
 
-    # 200 = "delivered", so Telegram won't retry. handle_update already swallows
-    # per-message errors, so we always ack — no retry storms.
+    # A 200 tells Telegram we've got it, so it won't retry. handle_update already
+    # handles per-message errors, so we always ack and avoid retry storms.
     return {"ok": True}

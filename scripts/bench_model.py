@@ -1,14 +1,14 @@
 """
 bench_model.py — A/B bench for the extraction model (Rung 6.6).
 
-Runs a fixed sample set through the EXISTING prompt + schema (imported from
+Runs a fixed sample set through the real prompt and schema (imported from
 extractor.py) against a given model id, printing per call: latency, HTTP status,
-usageMetadata (incl. thoughtsTokenCount if the model reports thinking), and the
-parsed dict. On a non-200 it prints the response body — that is how the free-tier
-daily quota wall was found.
+usageMetadata (including thoughtsTokenCount if the model reports thinking), and
+the parsed dict. On a non-200 it prints the response body, which is how the
+free-tier daily quota wall turned up.
 
-No thinkingConfig is sent. Gemini 3.x controls thinking via `thinkingLevel` (not
-2.5's `thinkingBudget`), and setting both is an API error; if latency is already
+No thinkingConfig is sent. Gemini 3.x controls thinking with thinkingLevel, not
+2.5's thinkingBudget, and setting both is an API error. If latency is already
 ~1-2s, thinking is off by default and nothing is needed.
 
 Usage:  python scripts/bench_model.py [model_id]     (default: gemini-3.1-flash-lite)
@@ -21,7 +21,7 @@ import time
 import requests
 from dotenv import load_dotenv
 
-# reuse the REAL prompt + schema so the bench measures exactly what prod runs
+# reuse the real prompt + schema so the bench measures what prod actually runs
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from extractor import PROMPT, SCHEMA
 
@@ -60,7 +60,7 @@ def call(model, text):
             "responseSchema": SCHEMA,
             "temperature": 0,
         },
-        # NOTE: intentionally NO thinkingConfig — see module docstring.
+        # no thinkingConfig on purpose; see the module docstring.
     }
     t0 = time.perf_counter()
     resp = requests.post(url, headers=headers, json=body, timeout=60)
@@ -75,7 +75,7 @@ def main():
         resp, dt = call(model, text)
         print(f"[{i+1}] {dt:.2f}s  HTTP {resp.status_code}")
         if resp.status_code != 200:
-            print("    BODY:", resp.text)              # non-200 -> show body (quota lives here)
+            print("    BODY:", resp.text)              # non-200: show the body (quota details live here)
             all_ok = False
         else:
             latencies.append(dt)

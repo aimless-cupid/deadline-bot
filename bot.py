@@ -1,9 +1,9 @@
 """
-bot.py — LOCAL DEV transport (long-polling).
+bot.py — local-dev transport (long-polling).
 
-In production the bot runs as a Telegram *webhook* served by web.py. This
-long-poll loop is kept only as a local dev tool: no public URL needed — just run
-it and message the bot. Both transports call the SAME handle_update() in handler.py.
+In production the bot runs as a webhook served by web.py. This long-poll loop is
+just a local dev tool: no public URL needed, you run it and message the bot. Both
+transports call the same handle_update() in handler.py.
 """
 
 import time
@@ -12,7 +12,7 @@ import requests
 from handler import BASE, handle_update   # importing handler loads .env + config
 
 LONG_POLL_TIMEOUT = 30                  # how long Telegram holds the connection open
-READ_TIMEOUT = LONG_POLL_TIMEOUT + 5    # our read timeout MUST exceed the poll window
+READ_TIMEOUT = LONG_POLL_TIMEOUT + 5    # read timeout has to be longer than the poll window
 
 
 def get_updates(offset):
