@@ -15,7 +15,7 @@ flowchart TD
     U["Telegram user"] -->|"forwards / pastes announcement"| TG["Telegram Bot API"]
     TG -->|"POST /telegram/webhook (secret token)"| W["FastAPI · web.py (Render)"]
     W --> H["handler.handle_update()"]
-    H --> E["extractor.extract()<br/>Gemini 2.5 Flash · raw REST · responseSchema · temp 0"]
+    H --> E["extractor.extract()<br/>Gemini 3.1 Flash Lite · raw REST · responseSchema · temp 0"]
     E --> R["extractor.resolve_when()<br/>dateparser · anchored to send time"]
     R --> S["db.save_deadline(chat_id)<br/>Neon Postgres · per-(chat, hash) dedupe"]
     S --> RE["sendMessage → reply + board link"]
@@ -27,7 +27,7 @@ flowchart TD
     J --> B
 ```
 
-It's one FastAPI service doing two jobs. `web.py` hosts the Telegram webhook at `POST /telegram/webhook`, and it serves each user their own private board at `/b/{token}` — the root `/` is just a landing page, there's no global dashboard. The webhook and the local long-poll loop in `bot.py` both call the same `handler.handle_update()`, so dev and prod can't quietly drift apart. Extraction and date resolution live in `extractor.py`. Every Postgres query lives in `db.py`. The stack is Python 3.12, FastAPI, psycopg v3, PostgreSQL on Neon, and Gemini 2.5 Flash over plain REST, all running on Render's free tier.
+It's one FastAPI service doing two jobs. `web.py` hosts the Telegram webhook at `POST /telegram/webhook`, and it serves each user their own private board at `/b/{token}` — the root `/` is just a landing page, there's no global dashboard. The webhook and the local long-poll loop in `bot.py` both call the same `handler.handle_update()`, so dev and prod can't quietly drift apart. Extraction and date resolution live in `extractor.py`. Every Postgres query lives in `db.py`. The stack is Python 3.12, FastAPI, psycopg v3, PostgreSQL on Neon, and Gemini 3.1 Flash Lite over plain REST, all running on Render's free tier.
 
 ## How it works
 
@@ -46,6 +46,8 @@ It's one FastAPI service doing two jobs. `web.py` hosts the Telegram webhook at 
 **Private boards by unguessable link, no login.** Every chat gets a board at `/b/{token}`, where `token` is a `secrets.token_urlsafe(16)` slug minted on first contact and handed back over Telegram. There's no account system — whoever holds the link sees that one board and nothing else, and the root URL exposes no one's data. That fits the product (a student wants their own deadlines without signing up) and keeps the surface tiny. The trade-off is that the link is a bearer credential — see limitations.
 
 **Raw REST for Gemini instead of the SDK.** The API key has an `AQ.` prefix that the official SDK rejects before the request even leaves the machine. A plain `POST` with the `x-goog-api-key` header, `responseMimeType=application/json`, a `responseSchema` and `temperature=0` works fine, and it keeps the dependency list short.
+
+**Flash-Lite, and I found the right model by reading the 429 body.** The extraction is really just a yes/no classification plus copying a date phrase out verbatim, at temperature 0 — there's no reasoning in it, so a reasoning-tuned model was paying latency and quota for nothing. I only worked that out when the bot started throwing 429s: the quota tables online said one thing, but the actual `error.details` in the response said `gemini-2.5-flash` is capped at 20 requests a *day* on this project's free tier, which can't serve anyone. Quotas are per-model, so I moved to `gemini-3.1-flash-lite` — same task, 500 a day instead of 20, and about 1.4s a call instead of ~12s. The retry loop reads that body too now: a per-day cap raises straight away instead of sleeping on a wall it can't get past, while a per-minute one waits exactly as long as the server's `retryDelay` asks.
 
 **Webhook, not long-poll.** Long-poll needs a worker process sitting there running forever. A webhook is just an HTTP endpoint, so the bot and the web app fold into one Render service, and it's what you'd use in production anyway. The webhook handler is a sync `def`, which means FastAPI pushes the blocking model, DB and HTTP work onto its threadpool. I kept `bot.py` around for local dev because long-poll doesn't need a public URL, and both transports go through `handler.handle_update()` regardless.
 

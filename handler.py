@@ -43,8 +43,38 @@ def send_message(chat_id, text):
     resp.raise_for_status()
 
 
+class DailyQuotaExceeded(Exception):
+    """A per-DAY Gemini quota is exhausted — unrecoverable within this request."""
+
+
+def _parse_quota_error(body):
+    """Pull (quota_id, retry_delay_seconds) from a Gemini 429 JSON body.
+    Defensive: returns (None, None) if the body isn't the expected shape."""
+    quota_id = retry_delay = None
+    try:
+        for d in body["error"]["details"]:
+            t = d.get("@type", "")
+            if t.endswith("QuotaFailure"):
+                viols = d.get("violations") or []
+                if viols:
+                    quota_id = viols[0].get("quotaId")
+            elif t.endswith("RetryInfo"):
+                rd = d.get("retryDelay")            # e.g. "22s", "1.5s"
+                if isinstance(rd, str) and rd.endswith("s"):
+                    retry_delay = float(rd[:-1])
+    except (KeyError, TypeError, ValueError, AttributeError):
+        pass                                       # unexpected shape -> fall back
+    return quota_id, retry_delay
+
+
 def extract_with_retry(text):
-    """Retry the model call on transient 429/503 only; let real errors surface."""
+    """Call the model, retrying only on RECOVERABLE quota/transient errors.
+
+    Quota-aware: a per-DAY 429 cannot recover inside this request, so raise
+    DailyQuotaExceeded immediately instead of sleeping pointlessly — that silence
+    is exactly what made a hard daily-quota wall look like 'a bit slow' for days.
+    Per-minute / TPM 429s and 503s are retried, honoring the server's retryDelay
+    when present. Logs ids/status/durations only — never text or keys."""
     attempts = 3
     backoff = 1
     for i in range(attempts):
@@ -52,11 +82,23 @@ def extract_with_retry(text):
             return extract(text)
         except requests.exceptions.HTTPError as e:
             code = e.response.status_code
-            if code in (429, 503) and i < attempts - 1:
-                time.sleep(backoff)
-                backoff = min(backoff * 2, 30)
-                continue
-            raise
+            if code not in (429, 503):
+                raise
+            quota_id = retry_delay = None
+            if code == 429:
+                try:
+                    quota_id, retry_delay = _parse_quota_error(e.response.json())
+                except ValueError:
+                    pass                           # non-JSON body -> fall back
+                if quota_id and "PerDay" in quota_id:
+                    print(f"gemini_quota_daily status=429 quota={quota_id}", flush=True)
+                    raise DailyQuotaExceeded(quota_id) from e
+            if i >= attempts - 1:
+                raise
+            s = max(backoff, retry_delay or 0)
+            print(f"gemini_retry attempt={i+1} status={code} quota={quota_id} sleep={s:.1f}s", flush=True)
+            time.sleep(s)
+            backoff = min(backoff * 2, 30)
 
 
 def format_reply(d):
@@ -81,6 +123,7 @@ def handle_update(update):
     single bad message never crashes the process and (under webhooks) never
     triggers an endless Telegram retry.
     """
+    update_id = update.get("update_id")
     message = update.get("message")
     if not message:
         return                      # non-message update (edited_message, etc.) -> ignore
@@ -105,8 +148,11 @@ def handle_update(update):
         )
         return
 
+    t_save = 0.0
     try:
+        t0 = time.perf_counter()
         result = extract_with_retry(text)
+        t_extract = time.perf_counter() - t0
 
         if result.get("has_deadline"):
             # Resolve the date phrase deterministically, anchored to when
@@ -114,7 +160,9 @@ def handle_update(update):
             received_at = datetime.fromtimestamp(message["date"], tz=BOT_TZ)
             result["deadline"] = resolve_when(result.get("when_text"), received_at)
 
+            ts = time.perf_counter()
             status = save_deadline(result, text, chat_id)
+            t_save = time.perf_counter() - ts
             reply = format_reply(result)
             if status == "duplicate":
                 reply += "\n\n(already saved earlier)"
@@ -122,8 +170,17 @@ def handle_update(update):
             reply = "No deadline found in that message."
 
         reply += f"\n\nYour board: {board_url}"
+        ts = time.perf_counter()
         send_message(chat_id, reply)
+        t_send = time.perf_counter() - ts
 
+        # ids + durations only — never text, keys, or board tokens.
+        print(f"timing update={update_id} extract={t_extract:.2f} save={t_save:.2f} "
+              f"send={t_send:.2f} total={time.perf_counter() - t0:.2f}", flush=True)
+
+    except DailyQuotaExceeded:
+        # hard per-day wall: tell the user plainly, not a generic failure.
+        send_message(chat_id, "Daily processing limit reached — try again tomorrow.")
     except Exception as e:
-        print(f"Extraction failed: {e}")
+        print(f"extract_failed update={update_id} error={type(e).__name__}", flush=True)
         send_message(chat_id, "Couldn't process that one — try again.")

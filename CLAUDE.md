@@ -11,7 +11,7 @@ A Telegram bot that ingests a forwarded/pasted announcement, makes **one** struc
 - **Python 3.12** (not 3.13 / 3.14 — see gotchas)
 - **FastAPI** — dashboard (Rung 5)
 - **PostgreSQL** + **psycopg v3** (`psycopg[binary]`)
-- **Model API via raw REST** — Gemini 2.5 Flash. **No SDK** (see gotchas).
+- **Model API via raw REST** — Gemini 3.1 Flash Lite (`gemini-3.1-flash-lite`). **No SDK** (see gotchas).
 - Dev env: **Windows + VS Code**. Secrets via **`python-dotenv`**.
 
 ## Scope — FROZEN. This is a clean *code* rebuild, NOT a feature reset.
@@ -38,7 +38,9 @@ A Telegram bot that ingests a forwarded/pasted announcement, makes **one** struc
 - **`AQ.` key → raw REST** (above). No provider switch.
 - **psycopg wheels were flaky on Python 3.14** → we use 3.12, which sidesteps it entirely. If a wheel ever fails to install, that's the class of problem — troubleshoot, don't panic.
 - **Extraction behavior to preserve:** clear deadlines extract fully; events-with-dates that are *not* deadlines (e.g. "biryani Friday") return `has_deadline=False` by design.
-- **Hardening that works:** retry/backoff on `503`/`429`, request timeouts, clean `Ctrl+C` shutdown.
+- **Hardening that works:** retry/backoff on `503`/`429`, request timeouts, clean `Ctrl+C` shutdown. 429 handling is **quota-aware**: a per-DAY `quotaId` is unrecoverable → raise, don't retry; per-minute/TPM → sleep `max(backoff, retryDelay)` and retry.
+- **Free-tier Gemini quotas are PER-MODEL and vary wildly.** This project: `gemini-2.5-flash` = 5 RPM / 20 RPD (unusable); `gemini-3.1-flash-lite` = 15 RPM / 500 RPD. ALWAYS read the 429 body (`quotaId` + `retryDelay`) and https://ai.dev/rate-limit — never trust docs or blog tables for the limit; they describe a config we don't have. Switching model = switching quota bucket (legitimate; quotas are per-model).
+- **Gemini 3.x uses `thinkingLevel`, not `thinkingBudget`** — do NOT set both (API error). Flash-Lite runs with thinking off by default at temp 0 (no `thoughtsTokenCount`, ~1.4s), so no `thinkingConfig` is sent.
 
 ## Build structure — rungs (one new failure surface each; isolation-test before integrating)
 1. **Env** — Python 3.12, VS Code, fresh repo, `.venv`, `requests`, Claude Code on the repo, GitHub.  ← *current*
