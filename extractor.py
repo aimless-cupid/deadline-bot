@@ -34,22 +34,24 @@ SCHEMA = {
                          "course", "summary", "tags"],
 }
 
-PROMPT = """You extract deadline info from a student/college announcement.
+PROMPT = """You extract deadline info from a message or announcement.
 
 Rules:
-- If the message states an actionable deadline (assignment, exam, fee, registration,
-  submission, application), set has_deadline=true and fill the fields.
-- If it is a social event or info that merely mentions a date but has NO actionable
-  deadline (e.g. "biryani night this Friday"), set has_deadline=false and leave the
-  other fields null/empty.
-- "when_text": copy the date phrase EXACTLY as written in the announcement
-  ("tomorrow", "by the 25th", "next Friday", "this Sunday"). Do NOT compute or
+- If the message states an ACTIONABLE deadline — something the reader must DO by a
+  date (assignment, exam, fee, bill payment, renewal, registration, application,
+  submission, booking, appointment) — set has_deadline=true and fill the fields.
+- If the message is a social event, invitation, or general note that merely MENTIONS
+  a date but requires no action by a deadline (e.g. "biryani night this Friday",
+  "Ram's birthday party is on Saturday"), set has_deadline=false and leave the other
+  fields null/empty.
+- "when_text": copy the date phrase EXACTLY as written in the message
+  ("tomorrow", "by the 25th", "next Friday", "5 August"). Do NOT compute or
   convert it into a calendar date — extract the words verbatim. Python resolves it.
 - If a deadline clearly exists but the message names no date phrase, keep
   has_deadline=true and set when_text=null.
 - tags: 2-4 short lowercase keywords.
 
-ANNOUNCEMENT:
+MESSAGE:
 {announcement}"""
 
 
