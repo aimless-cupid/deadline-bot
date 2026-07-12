@@ -104,12 +104,12 @@ def extract_with_retry(text):
 def format_reply(d):
     """Turn the structured dict into a human-readable Telegram message."""
     if not d.get("has_deadline"):
-        return "No deadline found in that message."
-    lines = [f"📌 {d.get('title') or 'Deadline'}"]
+        return "Didn't spot a deadline in that one."
+    lines = [d.get("title") or "Deadline"]
     if d.get("deadline"):
-        lines.append(f"🗓 {d['deadline']}")
+        lines.append(f"Due {d['deadline']}")
     if d.get("course"):
-        lines.append(f"📚 {d['course']}")
+        lines.append(d["course"])
     if d.get("summary"):
         lines.append(d["summary"])
     return "\n".join(lines)
@@ -142,9 +142,8 @@ def handle_update(update):
     if text.strip().lower().startswith("/start"):
         send_message(
             chat_id,
-            "Hi! Forward or paste any message with a deadline — an announcement, "
-            "a bill, a renewal notice — and I'll pull out the deadline and add it "
-            "to your private board.\n\n"
+            "Hey! Send me anything with a deadline in it and I'll save the date "
+            "to your private board. Bills, notices, assignments, whatever works.\n\n"
             f"Your board: {board_url}",
         )
         return
@@ -166,9 +165,9 @@ def handle_update(update):
             t_save = time.perf_counter() - ts
             reply = format_reply(result)
             if status == "duplicate":
-                reply += "\n\n(already saved earlier)"
+                reply += "\n\n(you already saved this one)"
         else:
-            reply = "No deadline found in that message."
+            reply = "Didn't spot a deadline in that one."
 
         reply += f"\n\nYour board: {board_url}"
         ts = time.perf_counter()
@@ -181,7 +180,7 @@ def handle_update(update):
 
     except DailyQuotaExceeded:
         # hard per-day wall: tell the user plainly, not a generic failure.
-        send_message(chat_id, "Daily processing limit reached — try again tomorrow.")
+        send_message(chat_id, "That's my limit for today. Try again tomorrow.")
     except Exception as e:
         print(f"extract_failed update={update_id} error={type(e).__name__}", flush=True)
-        send_message(chat_id, "Couldn't process that one — try again.")
+        send_message(chat_id, "Something went wrong there. Give it another go.")
