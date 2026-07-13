@@ -1,6 +1,8 @@
 import os
+from datetime import date
 from fastapi import FastAPI, Request, Header, HTTPException
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from dotenv import load_dotenv
 
@@ -11,7 +13,10 @@ load_dotenv()
 WEBHOOK_SECRET = os.environ["WEBHOOK_SECRET"]
 
 app = FastAPI()
+app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
+# so a template can work out "days until" for the urgent badge, no DB field needed
+templates.env.globals["today"] = date.today
 
 
 def _chat_id_or_404(token):
