@@ -2,39 +2,65 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Deadline Dashboard</title>
+  <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <h1>Upcoming Deadlines</h1>
+  <main class="wrap">
+    <h1 class="page-title">Your deadlines</h1>
 
-  <form method="get" action="/b/{{ token }}">
-    <input type="text" name="q" value="{{ q or '' }}">
-    <button type="submit">Search</button>
-    {% if q %}<a href="/b/{{ token }}">Clear</a>{% endif %}
-  </form>
+    <form class="search" method="get" action="/b/{{ token }}">
+      <input class="search__input" type="text" name="q" value="{{ q or '' }}"
+             placeholder="Search title, course or summary" aria-label="Search deadlines">
+      <button class="btn" type="submit">Search</button>
+      {% if q %}<a class="clear-link" href="/b/{{ token }}">Clear</a>{% endif %}
+    </form>
 
-  {% if upcoming %}
-    <ul>
-      {% for d in upcoming %}
-        <li>
-          <strong>{{ d.deadline }}</strong> — {{ d.title }}
-          {% if d.course %}({{ d.course }}){% endif %}
-          {% if d.summary %}<br><small>{{ d.summary }}</small>{% endif %}
-        </li>
-      {% endfor %}
-    </ul>
-  {% else %}
-    <p>No upcoming deadlines.</p>
-  {% endif %}
+    {% if upcoming %}
+      <div class="cards">
+        {% for d in upcoming %}
+          {% set days_left = (d.deadline - today()).days %}
+          <article class="card">
+            <div class="badge {% if days_left <= 2 %}badge--urgent{% endif %}">
+              <span class="badge__month">{{ d.deadline.strftime('%b') }}</span>
+              <span class="badge__day">{{ d.deadline.strftime('%d') }}</span>
+            </div>
+            <div class="card__body">
+              <h2 class="card__title">{{ d.title }}</h2>
+              {% if d.course %}<div class="card__meta">{{ d.course }}</div>{% endif %}
+              {% if d.summary %}<p class="card__summary">{{ d.summary }}</p>{% endif %}
+              {% if d.tags %}
+                <ul class="tags">
+                  {% for tag in d.tags %}<li class="tag">{{ tag }}</li>{% endfor %}
+                </ul>
+              {% endif %}
+            </div>
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="empty">
+        {% if q %}No deadlines match "{{ q }}".{% else %}Nothing here yet. Forward the bot a message with a deadline and it'll show up.{% endif %}
+      </p>
+    {% endif %}
 
-  {# Undated block: only shows if there are unresolved-date rows #}
-  {% if undated %}
-    <h2>Undated / needs review</h2>
-    <ul>
-      {% for d in undated %}
-        <li>{{ d.title }} — <small>{{ d.summary }}</small></li>
-      {% endfor %}
-    </ul>
-  {% endif %}
+    {# only shows when there are rows whose date didn't resolve #}
+    {% if undated %}
+      <section class="review">
+        <h2 class="review__title">Needs review · date unclear</h2>
+        <div class="cards">
+          {% for d in undated %}
+            <article class="card">
+              <div class="card__body">
+                <h3 class="card__title">{{ d.title }}</h3>
+                {% if d.summary %}<p class="card__summary">{{ d.summary }}</p>{% endif %}
+              </div>
+            </article>
+          {% endfor %}
+        </div>
+      </section>
+    {% endif %}
+  </main>
 </body>
 </html>
