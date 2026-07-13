@@ -6,7 +6,7 @@ Forward it a message that's got a deadline hiding in it and it reads the date ou
 
 ## Demo
 
-![deadline-bot demo](docs/demo.gif)
+![deadline-bot demo](docs/demo.gif?v=2)
 
 ## How it works
 
