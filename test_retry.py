@@ -1,11 +1,11 @@
 """
 test_retry.py — unit test for quota-aware 429 handling (Rung 6.6).
 
-No live calls: extract() is monkeypatched to raise crafted HTTPErrors carrying
-fixture 429 bodies, and time.sleep is stubbed. Verifies:
-  - a per-DAY quota 429 is NOT retried (raises DailyQuotaExceeded, one call, no sleep),
-  - a per-minute 429 with retryDelay sleeps the SERVER-specified delay, then retries
-    and succeeds.
+No live calls: extract() is monkeypatched to raise HTTPErrors carrying fixture
+429 bodies, and time.sleep is stubbed. Checks that:
+  - a daily-quota 429 isn't retried (raises DailyQuotaExceeded, one call, no sleep),
+  - a per-minute 429 with retryDelay sleeps the delay the server asked for, then
+    retries and succeeds.
 
 Standalone, no pytest: `python test_retry.py`.
 """
@@ -48,7 +48,7 @@ def run():
     orig_extract, orig_sleep = handler.extract, handler.time.sleep
     handler.time.sleep = lambda s: sleeps.append(s)     # never actually sleep
     try:
-        # --- per-DAY: must NOT retry, must raise DailyQuotaExceeded ---
+        # daily quota: must not retry, must raise DailyQuotaExceeded
         calls = {"n": 0}
 
         def perday(_text):
@@ -62,11 +62,11 @@ def run():
         except handler.DailyQuotaExceeded:
             raised = True
         assert raised, "per-day 429 should raise DailyQuotaExceeded"
-        assert calls["n"] == 1, f"per-day should NOT retry, made {calls['n']} calls"
+        assert calls["n"] == 1, f"per-day should not retry, made {calls['n']} calls"
         assert sleeps == [], f"per-day should not sleep, slept {sleeps}"
         print("PASS: per-day 429 -> DailyQuotaExceeded, no retry, no sleep")
 
-        # --- per-minute: sleep the SERVER retryDelay, then retry + succeed ---
+        # per-minute: sleep the server's retryDelay, then retry and succeed
         sleeps.clear()
         state = {"n": 0}
 

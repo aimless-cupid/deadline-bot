@@ -1,12 +1,12 @@
 """
-test_scoping.py — isolation test for Rung 6.5a per-user scoping.
+test_scoping.py — isolation test for per-user scoping (Rung 6.5a).
 
-Runs against the LOCAL Postgres (DATABASE_URL). Proves:
-  - two different chats can each save the SAME announcement (the cross-user
-    collision that a global unique hash would silently drop),
-  - re-saving the same text for the SAME chat is still a per-user no-op,
-  - get_upcoming / get_undated never leak one chat's rows to another,
-  - board tokens are stable + resolvable; unknown tokens resolve to None.
+Runs against the local Postgres (DATABASE_URL) and checks that:
+  - two different chats can each save the same announcement (the cross-user
+    collision a global unique hash would drop),
+  - re-saving the same text for the same chat stays a no-op,
+  - get_upcoming / get_undated never leak one chat's rows into another's,
+  - board tokens are stable and resolvable, and unknown tokens return None.
 
 Standalone, no pytest: `python test_scoping.py`. Cleans up its own rows.
 """

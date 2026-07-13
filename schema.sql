@@ -10,8 +10,8 @@ CREATE TABLE IF NOT EXISTS deadlines (
     raw_text     TEXT NOT NULL,               -- original announcement
     content_hash TEXT NOT NULL,               -- dedupe fingerprint (scoped below)
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-    -- uniqueness scoped to ownership: the same announcement forwarded by two
-    -- users is two rows, not a silent drop for whoever sent it second.
+    -- uniqueness is per owner: the same announcement forwarded by two users
+    -- becomes two rows, instead of silently dropping the second one.
     UNIQUE (chat_id, content_hash)
 );
 
