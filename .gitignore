@@ -216,3 +216,10 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Project-local, keep out of the repo
+.claude/
+# setwebhook.json holds WEBHOOK_SECRET, never commit
+setwebhook.json
+# ad-hoc local bench, superseded by scripts/bench_model.py
+bench.py
